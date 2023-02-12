@@ -1,0 +1,40 @@
+name: "Called Workflow Direct File"
+on:
+  workflow_call:
+    inputs:
+      Input1:
+        description: 'Input 1 from caller workflow'
+        required: true
+        type: string
+      Input2:
+        description: 'Input 2 from caller workflow'
+        required: true
+        type: string
+      Input3:
+        description: 'Input 3 from caller workflow'
+        required: true
+        type: string
+      Input4:
+        description: 'Input 4 from caller workflow'
+        required: true
+        type: string
+
+jobs:
+  build-plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.1.0
+        
+      - name: Print input values
+        run: | 
+          echo Hello World !
+          echo ${{ inputs.Input1 }}
+          echo ${{ inputs.Input2 }}
+          echo ${{ inputs.Input3 }}
+          echo ${{ inputs.Input4 }}
+
