@@ -1,0 +1,108 @@
+name: services_workflow
+on:
+ repository_dispatch:
+    types: [services_workflow]
+
+env:
+  runPreCommit: false
+  runPytest: false
+  runCheckAlembic: false
+  appServiceName: ''
+  imageName: ''
+  pythonVersion: 3.8
+  runVeracode: false
+  PIP_CACHE_DIR: ${{ env.Pipeline.Workspace }}/.pip
+  PRE_COMMIT_HOME: ${{ env.Pipeline.Workspace }}/pre-commit-cache
+  AZURE_SUBSCRIBPTION: ${{ env.PROD_SUBSCRIPTION }}
+  DOCKER_SERVICE_CONNECTION: ${{env.PROD_SERVICE_CONNECTION }}
+  DOCKER_NAMESPACE: ${{ env.PROD_CONTAINER_REPOSITORY }}
+  DEPLOY: true
+  VERACODE: false
+  TAG: ${{ github.run_id }}
+
+jobs:
+  Deploy:
+  steps:
+  - uses: actions/checkout@v2
+
+  - name: Azure Login
+    uses: azure/login@v1
+    with:
+      creds: ${{ secrets.AZURE_SP }}
+
+  - name: Docker Login
+    uses: azure/docker-login@v1
+    with:
+      login-server: ''
+      username: ${{ secrets.REGISTRY_USERNAME }} 
+      password: ${{ secrets.REGISTRY_PASSWORD }}
+
+  - name: '[Python] Set Python version to ${{ env.pythonVersion }}'
+    uses: actions/setup-python@v1
+    with:
+      python-version: ${{ env.pythonVersion }}
+
+  - name: Cache pip packages
+    uses: actions/cache@v3
+    with:
+      key: python | "${{ runner.os }}" | requirements.txt
+      restore-keys:
+      path: ${{ env.PIP_CACHE_DIR }}
+
+  - name: Cache Pre Commit
+    uses: actions/cache@v3
+    with:
+      key: pre-commit | .pre-commit-config.yaml
+      restore-keys:
+      path: ${{ env.PRE_COMMIT_HOME }}
+    if: (success() && (${{ env.runPreCommit }} == true))
+
+  - name: '[Python] Install Python requirements'
+    run: |
+      pip install -r requirements.txt
+      pip install omniblu-backend-common -U
+
+  - name: '[Python] Run pre-commit'
+    run: pre-commit run -a
+    if: (success() && (${{ env.runPreCommit}} == true))
+
+  - name: '[Python] Run pytest with coverage'
+    run: |
+      python -n pytest tests/ \
+             --doctest-modules \
+             --junitxml-junit/test-results.xml
+             --COV=, \
+             --cov-report=xml
+    if: (success() && (${{ env.runPytest }} == true))
+
+  - #echo "Error: the step 'PublishTestResults@2' does not have a conversion path yet"
+    run: |
+      echo "Error: the step 'PublishTestResults@2' does not have a conversion path yet"
+    if: (success() && (${{ env.runPytest }} == true))
+
+  - #echo "Error: the step 'PublishCodeCoverageResults@1' does not have a conversion path yet" 
+    run: |
+      echo "Error: the step 'PublishCodeCoverageResults@1' does not have a conversion path yet"
+    if: (success() && (${{ env.runPytest }} == true))
+
+  - name: '[Python] Check Alembic Multi Head'
+    run: python cicd/check_alembic_rev.py
+    if: (success() && (${{ env.runCheckAlembic }} == true))
+
+  - name: '[Docker] Build image ${{ env.imageName }}'
+    run: docker build --file ${{ github.workspace }}/Dockerfile ${{ env.imageName } --tags ${{ env.TAG }}
+    if: (success() && (variables['DEPLOY'] == 'true'))
+
+  - name: '[Docker] Push image to container registry ${{ env.imageName }}'
+    run: docker push --file Dockerfile ${{ env.DOCKER_SERVICE_CONNECTION }} ${{ env.imageName }} --tags ${{ env.TAG }}
+    if: (success() && (variables['DEPLOY'] == 'true'))
+
+  - name: Deploy app service &{{ env.appServiceName }}
+    uses: Azure/webapps-deploy@v2
+    with:
+      app-name: ${{ env.appServiceName }}
+    if: (success() && (variables[*DEPLOY'] == 'true'))
+Veracode:
+  needs:
+  - Deploy
+  if: ((${{ env.runVeracode }} == true) && (variables['VERACODE*] == 'true'))
